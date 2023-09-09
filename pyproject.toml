@@ -1,0 +1,17 @@
+[project]
+name = "ulm"
+version = "0.1.0"
+description = "Ultralearning LLM project"
+authors = [
+    {name = "Artem Daineko", email = "dayneko.ab@gmail.com"},
+]
+dependencies = [
+    "click>=8.1.7",
+]
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
