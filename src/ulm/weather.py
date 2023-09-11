@@ -5,6 +5,7 @@ from typing import Optional
 
 import click
 import dotenv
+import openai
 import requests
 
 dotenv.load_dotenv()
@@ -12,6 +13,7 @@ dotenv.load_dotenv()
 latitude = os.environ["LOCATION_LATITUDE"]
 longitude = os.environ["LOCATION_LONGITUDE"]
 owm_key = os.environ["OPENWEATHERMAP_KEY"]
+openai.api_key = os.environ["OPENAI_API_KEY"]
 
 
 @dataclass
@@ -54,7 +56,7 @@ class Weather:
             snow_period_hours = None
 
         return cls(
-            current_time=datetime.utcnow(),
+            current_time=datetime.now(),
             datapoint_time=datetime.fromtimestamp(vals["dt"]),
             sunrise_time=datetime.fromtimestamp(vals["sys"]["sunrise"]),
             sunset_time=datetime.fromtimestamp(vals["sys"]["sunset"]),
@@ -71,6 +73,32 @@ class Weather:
             snow_period_hours=snow_period_hours,
         )
 
+    def description(self) -> str:
+        return "\n".join(
+            [
+                f"Local time: {self.current_time}, Sunrise time: {self.sunrise_time}, Sunset time: {self.sunset_time}",
+                f"Temperature: {self.temperature_celcius} celcius, feels like {self.temperature_feels_like}",
+                f"Pressure {self.pressure} hPa; Humidity: {self.humidity} %",
+                f"Clouds: {self.clouds_percent} %",
+                f"Wind speed {self.wind_speed_msec} m/sec"
+                + (
+                    ""
+                    if self.wind_gust_msec is None
+                    else f" with gusts {self.wind_gust_msec}"
+                ),
+                (
+                    "No rain"
+                    if self.rain_volume_mm is None
+                    else f"Rain volume {self.rain_volume_mm} mm in last {self.rain_period_hours} hours"
+                ),
+                (
+                    "No snow"
+                    if self.snow_volume_mm is None
+                    else f"Snow volume {self.snow_volume_mm} mm in last {self.snow_period_hours} hours"
+                ),
+            ]
+        )
+
 
 def current_weather() -> Weather:
     response = requests.get(
@@ -81,6 +109,30 @@ def current_weather() -> Weather:
     return Weather.from_openweathermap(response.json())
 
 
+def what_to_wear(weather: Weather, activity: str) -> str:
+    completion = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "Be coincise",
+            },
+            {
+                "role": "user",
+                "content": "Recommend what to wear.\n"
+                + "Current weather:\n"
+                + weather.description()
+                + "\n"
+                + f"Activity: {activity}",
+            },
+        ],
+    )
+    return completion["choices"][0]["message"]["content"]
+
+
 @click.command()
-def cli():
-    click.echo(current_weather())
+@click.option("-a", "--activity", type=str, default="30 minutes walk in the park")
+def cli(activity: Optional[str]):
+    weather = current_weather()
+    click.echo(weather.description())
+    click.echo(what_to_wear(weather, activity))
