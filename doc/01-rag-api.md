@@ -12,3 +12,5 @@ In the end I will make use of API where all of the parameters will be available 
 ## Thoughts after
 
 I spent more time to parse API than to use OpenAI API. I'm not happy with the result. ChatGPT recommends sunglasses even after sunset, or before sunrise. But I will not push for prompt engineering right now and will do it later.
+
+I didn't learn anything new for now.
