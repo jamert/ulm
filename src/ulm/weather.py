@@ -4,16 +4,13 @@ from datetime import datetime
 from typing import Optional
 
 import click
-import dotenv
 import openai
 import requests
 
-dotenv.load_dotenv()
 
 latitude = os.environ["LOCATION_LATITUDE"]
 longitude = os.environ["LOCATION_LONGITUDE"]
 owm_key = os.environ["OPENWEATHERMAP_KEY"]
-openai.api_key = os.environ["OPENAI_API_KEY"]
 
 
 @dataclass
