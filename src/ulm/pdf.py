@@ -28,19 +28,18 @@ def needs_merge(e1: Text, e2: Text) -> bool:
     
     Snippet 1:
     ```
-    {e1}
+    {e1.text.split(".")[-1]}
     ```
     
     Snippet 2:
     ```
-    {e2}
+    {e2.text.split(".")[0]}
     ```
 
     If text snippets should be merged into one paragraph, respond with `yes`, otherwise, respond `no`.
     """
     completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
+        model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
     )
     response = completion["choices"][0]["message"]["content"]
     return "yes" in response.lower()

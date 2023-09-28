@@ -21,4 +21,4 @@ p3 = "The observations discussed here were gathered through a one-year ethnograp
     ],
 )
 def test_needs_merge(e1, e2, expected):
-    assert needs_merge(e1, e2) is expected
+    assert needs_merge(element_from_text(e1), element_from_text(e2)) is expected
