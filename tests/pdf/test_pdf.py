@@ -1,8 +1,8 @@
 import pytest
 
-from unstructured.partition.text import element_from_text
+from unstructured.partition.text import element_from_text, Text
 
-from ulm.pdf import needs_merge
+from ulm.pdf import needs_merge, is_garbage
 
 p1 = "Staying with repair as practice allows for a more careful consideration of how human labor works in and through infrastructure. Building on theorizations of repair and maintenance as improvisational and adaptive labor, driven by human ingenuity (Graham and Thrift, 2007), I push these arguments forward by considering how that work is learned, carried out, and how it emerges from the specific geohistorical context of the Mexico City’s networked water system. Namely, I show how patchwork is a result of structural austerity, widespread (yet unequal and uneven) infrastructural decay, and of the changing flows of urban water and urban soil. Patchwork is an improvisational logic that enables the city to"
 footer_text = "De Coss-Corzo"
@@ -22,3 +22,16 @@ p3 = "The observations discussed here were gathered through a one-year ethnograp
 )
 def test_needs_merge(e1, e2, expected):
     assert needs_merge(element_from_text(e1), element_from_text(e2)) is expected
+
+
+@pytest.mark.parametrize(
+    "e, expected",
+    [
+        pytest.param(p1, False, id="ignore footer"),
+        pytest.param(footer_text, True, id="ignore page number"),
+        pytest.param(page_number, True, id="split paragraph"),
+        pytest.param(p2, False, id="separate paragraphs"),
+    ],
+)
+def test_is_garbage(e, expected):
+    assert is_garbage(Text(e)) is expected

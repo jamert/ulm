@@ -14,10 +14,7 @@ def process_pdf(filename):
     clean_hyphen = lambda s: s.replace("- ", "")
     remove_cid = lambda s: re.sub(r"\(cid:[0-9]+\)", "", s)
     for e in elements:
-        e.apply(clean_ligatures)
-        e.apply(clean_hyphen)
-        e.apply(clean_extra_whitespace)
-        e.apply(remove_cid)
+        e.apply(clean_ligatures, clean_hyphen, clean_extra_whitespace, remove_cid)
     return elements
 
 
@@ -45,10 +42,49 @@ def needs_merge(e1: Text, e2: Text) -> bool:
     return "yes" in response.lower()
 
 
+def is_garbage(e: Text, e2=None) -> bool:
+    if e.category in ("NarrativeText", "Title"):
+        return False
+
+    prompt = f"""
+    The following text snippet is extracted from PDF file.
+    
+    Snippet:
+    ```
+    {e.text}
+    ```
+
+    If text snippet is artefact text (page number, name of the journal, metadata about file, etc.) then respond `yes`.
+    Otherwise, respond `no`.
+
+    Examples of categorization:
+    ```
+    3
+    ``` -> this is page number -> `yes`
+    ```
+    EPD: Society and Space 0(0)
+    ``` -> this looks like journal name -> `yes`
+    ```
+    Keywords Adaptation, infrastructure, labor, Mexico City, repair, urban modernity
+    ``` -> this is keyword section from the article -> `no`
+    ```
+    De Coss-Corzo
+    ``` -> looks like author's name without context -> `yes`
+    """
+    completion = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+    )
+    response = completion["choices"][0]["message"]["content"]
+    return "yes" in response.lower()
+
+
 if __name__ == "__main__":
     elements = process_pdf("copyrighted/patchwork.pdf")
     for index, e in enumerate(elements):
-        # if sentence_count(e.text) > 2 and e.category != "Title":
-        print(index, e.text)
-        if index > 20:
+        print(index, e.category, e.text)
+        # for _ in range(5):
+
+        if index > 40:
             break
