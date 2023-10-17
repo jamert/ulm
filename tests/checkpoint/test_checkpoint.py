@@ -1,14 +1,14 @@
 import tempfile
 from pathlib import Path
 from itertools import cycle
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import ulm.checkpoint as checkpoint
 
 
 def test_singular():
-    # make clean dir
     codeblock = Mock(side_effect=cycle(["VALUE1", "VALUE2"]))
+    # make clean dir
     with tempfile.TemporaryDirectory() as tempdir:
         filename = Path(tempdir).joinpath("singular.cp")
 
@@ -28,3 +28,36 @@ def test_singular():
 
         # assert blocks have the same values
         assert first == second
+
+
+def test_indexed():
+    items = range(5)
+    codeblock = Mock(wraps=lambda value: value)
+    with tempfile.TemporaryDirectory() as tempdir:
+        filename = Path(tempdir).joinpath("indexed.cp")
+
+        # clean run
+        cp = checkpoint.indexed(filename, iterable=items, once_in=3, initializer=[])
+        for index, item, context in cp:
+            context.append(codeblock(item))
+            cp.save(index, context)
+        else:
+            first = cp.saved()
+
+        codeblock.assert_has_calls([call(i) for i in range(5)])
+        assert first == list(range(5))
+
+        codeblock.reset_mock()
+        # run from finished
+        cp = checkpoint.indexed(filename, iterable=items, once_in=3, initializer=[])
+        for index, item, context in cp:
+            print(index, item, context)
+            context.append(codeblock(item))
+            cp.save(index, context)
+        else:
+            second = cp.saved()
+
+        codeblock.assert_not_called()
+        assert first == second
+
+        # TODO: restart from the middle
