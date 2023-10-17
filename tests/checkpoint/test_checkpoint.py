@@ -51,7 +51,6 @@ def test_indexed():
         # run from finished
         cp = checkpoint.indexed(filename, iterable=items, once_in=3, initializer=[])
         for index, item, context in cp:
-            print(index, item, context)
             context.append(codeblock(item))
             cp.save(index, context)
         else:
@@ -60,4 +59,36 @@ def test_indexed():
         codeblock.assert_not_called()
         assert first == second
 
-        # TODO: restart from the middle
+
+def test_indexed_restores_from_the_middle():
+    items = range(5)
+    codeblock = Mock(wraps=lambda value: value)
+    with tempfile.TemporaryDirectory() as tempdir:
+        filename = Path(tempdir).joinpath("indexed.cp")
+
+        # clean run
+        cp = checkpoint.indexed(filename, iterable=items, once_in=3, initializer=[])
+        for index, item, context in cp:
+            context.append(codeblock(item))
+            cp.save(index, context)
+
+            if index == 3:
+                break
+
+        first = context
+
+        codeblock.assert_has_calls([call(i) for i in range(4)])
+        assert first == list(range(4))
+
+        codeblock.reset_mock()
+        # run from finished
+        cp = checkpoint.indexed(filename, iterable=items, once_in=3, initializer=[])
+        for index, item, context in cp:
+            context.append(codeblock(item))
+            cp.save(index, context)
+        else:
+            second = cp.saved()
+
+        codeblock.assert_has_calls([call(i) for i in range(3, 5)])
+        assert set(first) < set(second)  # is subset
+        assert set(second) - set(first) == {4}
