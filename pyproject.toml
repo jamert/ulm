@@ -22,8 +22,10 @@ build-backend = "pdm.backend"
 
 [project.scripts]
 ulm-weather = "ulm.weather:cli"
+ulm-pdf = "ulm.pdf:cli"
 
 [tool.pdm.dev-dependencies]
 dev = [
     "pytest>=7.4.2",
+    "mypy>=1.6.0",
 ]

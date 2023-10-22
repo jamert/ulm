@@ -27,11 +27,12 @@ def test_needs_merge(e1, e2, expected):
 @pytest.mark.parametrize(
     "e, expected",
     [
-        pytest.param(p1, False, id="ignore footer"),
-        pytest.param(footer_text, True, id="ignore page number"),
-        pytest.param(page_number, True, id="split paragraph"),
-        pytest.param(p2, False, id="separate paragraphs"),
+        pytest.param(p1, False, id="proper paragraph"),
+        pytest.param(footer_text, True, id="author's name"),
+        pytest.param(page_number, True, id="page number"),
+        pytest.param(p2, False, id="paragraph without begginning"),
     ],
 )
 def test_is_garbage(e, expected):
-    assert is_garbage(Text(e)) is expected
+    garbage, explanation = is_garbage(Text(e))
+    assert garbage is expected, explanation
