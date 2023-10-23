@@ -1,15 +1,16 @@
 import json
 import re
 from textwrap import dedent
-from typing import Iterator, Optional
 from pathlib import Path
 
 import openai
+import chromadb
 from unstructured.partition.pdf import partition_pdf
-from unstructured.partition.text import Text, element_from_text
-from unstructured.partition.text_type import sentence_count
-from unstructured.staging.base import convert_to_dict
-from unstructured.chunking.title import chunk_by_title
+from unstructured.partition.text import (
+    Text,
+    element_from_text,
+    split_content_to_fit_max,
+)
 from unstructured.cleaners.core import clean_ligatures, clean_extra_whitespace
 
 import ulm.checkpoint as checkpoint
@@ -169,12 +170,40 @@ def document_to_jsonl(pdf: str, jsonl: str) -> None:
             fd.write("\n")
 
 
-def cli() -> None:
-    document_to_jsonl("copyrighted/patchwork.pdf", "copyrighted/patchwork.jsonl")
-    # elements = pdf_to_elements("copyrighted/patchwork.pdf")
-    # for index, e in enumerate(elements):
-    #     print(index, e.category, e.text)
-    #     # for _ in range(5):
+class ChromaFactory:
+    collection_name = "default"
 
-    #     if index > 40:
-    #         break
+    @classmethod
+    def from_jsonl(cls, jsonl: Path, destination: Path) -> chromadb.Collection:
+        client = chromadb.PersistentClient(path=str(destination))
+        client.delete_collection(cls.collection_name)
+        collection = client.create_collection(cls.collection_name)
+        with jsonl.open("r") as fd:
+            for line in fd:
+                element: dict = json.loads(line)
+                # for i, chunk in enumerate(
+                #     split_content_to_fit_max(element["text"], max_partition=150)
+                # ):
+                collection.add(
+                    documents=element["text"],
+                    metadatas={key: element.get(key, -1) for key in ["page"]},
+                    ids=f"{element['element_id']}",
+                )
+
+        return collection
+
+    @classmethod
+    def from_path(cls, path: Path) -> chromadb.Collection:
+        return chromadb.PersistentClient(path=str(path)).get_collection(
+            cls.collection_name
+        )
+
+
+def cli() -> None:
+    from pprint import pprint
+
+    # document_to_jsonl("copyrighted/patchwork.pdf", "copyrighted/patchwork.jsonl")
+    collection = ChromaFactory.from_jsonl(
+        Path("copyrighted/patchwork.v2.jsonl"), Path("copyrighted/patchwork")
+    )
+    pprint(collection.peek())
