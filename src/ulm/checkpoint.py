@@ -43,10 +43,11 @@ class indexed:
         self._restore()
 
     def _restore(self) -> None:
-        self._index = -1
+        self._index = 0
         if self.filename.exists():
             with self.filename.open("rb") as fd:
                 self._index, self._context = pickle.load(fd)
+                self._index -= 1
 
             for _ in range(self._index):
                 next(self.iterable)
@@ -55,8 +56,8 @@ class indexed:
         return self
 
     def __next__(self) -> tuple[int, Any, Any]:
-        self._index += 1
-        return self._index, next(self.iterable), self._context
+        index, self._index = self._index, self._index + 1
+        return index, next(self.iterable), self._context
 
     def save(self, index: int, context: Any) -> Any:  # TODO: generic type
         if self.once_in is None or (index + 1) % self.once_in == 0:

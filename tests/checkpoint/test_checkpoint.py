@@ -61,7 +61,7 @@ def test_indexed():
 
 
 def test_indexed_restores_from_the_middle():
-    items = range(5)
+    items = list(range(5))
     codeblock = Mock(wraps=lambda value: value)
     with tempfile.TemporaryDirectory() as tempdir:
         filename = Path(tempdir).joinpath("indexed.cp")
@@ -71,6 +71,7 @@ def test_indexed_restores_from_the_middle():
         for index, item, context in cp:
             context.append(codeblock(item))
             cp.save(index, context)
+            assert items[index] == item
 
             if index == 3:
                 break
@@ -86,6 +87,7 @@ def test_indexed_restores_from_the_middle():
         for index, item, context in cp:
             context.append(codeblock(item))
             cp.save(index, context)
+            assert items[index] == item
         else:
             second = cp.saved()
 
