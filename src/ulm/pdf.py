@@ -5,11 +5,11 @@ from pathlib import Path
 
 import openai
 import chromadb
+import click
 from unstructured.partition.pdf import partition_pdf
 from unstructured.partition.text import (
     Text,
     element_from_text,
-    split_content_to_fit_max,
 )
 from unstructured.cleaners.core import clean_ligatures, clean_extra_whitespace
 
@@ -20,6 +20,15 @@ def root(filename: Path) -> Path:
     rootdir = filename.parent.joinpath(filename.stem)
     rootdir.mkdir(exist_ok=True)
     return rootdir
+
+
+def confirmed(decision: bool, prompt: str, *items: str) -> bool:
+    if not decision:
+        return decision
+
+    for item in items:
+        click.echo(item)
+    return click.confirm(prompt, default=decision)
 
 
 def pdf_to_elements(filename: Path) -> list[Text]:
@@ -39,11 +48,18 @@ def pdf_to_elements(filename: Path) -> list[Text]:
 
     with checkpoint.singular(filename=rootdir.joinpath("filtered")) as cp:
         if not (filtered := cp.saved()):
-            filtered = cp.save(list(filter(lambda e: not is_garbage(e)[0], elements)))
+            filtered = cp.save(
+                list(
+                    filter(
+                        lambda e: not confirmed(
+                            is_garbage(e)[0], "Is this snippet an artifact?", e.text
+                        ),
+                        elements,
+                    )
+                )
+            )
 
     max_index = len(filtered) - 1
-    processed = []
-    skip_indices = set()
 
     cp = checkpoint.indexed(
         filename=rootdir.joinpath("merged"),
@@ -65,14 +81,24 @@ def pdf_to_elements(filename: Path) -> list[Text]:
         else:
             max_delta = min(max_index - index, 3)
             for candidate_index in range(index + 1, index + max_delta):
-                if needs_merge(element, filtered[candidate_index]):
+                if confirmed(
+                    needs_merge(element, filtered[candidate_index]),
+                    "Does it need merge?",
+                    element.text,
+                    filtered[candidate_index].text,
+                ):
                     sep = "" if element.text.endswith(" ") else " "
                     processed.append(
                         element_from_text(
                             sep.join([element.text, filtered[candidate_index].text])
                         )
                     )
-                    skip_indices.add(candidate_index)
+                    if confirmed(
+                        True,
+                        "Can we drop this snippet?",
+                        filtered[candidate_index].text,
+                    ):
+                        skip_indices.add(candidate_index)
 
                     break
 
@@ -84,27 +110,8 @@ def pdf_to_elements(filename: Path) -> list[Text]:
 
 
 def needs_merge(e1: Text, e2: Text) -> bool:
-    prompt = f"""
-    The following two text snippets are extracted from PDF file.
-    We need to decide if snippets look like of one paragraph and assuming snippet 2 is continuation of snippet 1
-    
-    Snippet 1:
-    ```
-    {e1.text.split(".")[-1]}
-    ```
-    
-    Snippet 2:
-    ```
-    {e2.text.split(".")[0]}
-    ```
-
-    If text snippets should be merged into one paragraph, respond with `yes`, otherwise, respond `no`.
-    """
-    completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
-    )
-    response = completion["choices"][0]["message"]["content"]
-    return "yes" in response.lower()
+    p2 = e2.text.split(".")[0]
+    return not e1.text.endswith(".") and len(p2) > 30, ""
 
 
 def is_garbage(e: Text) -> tuple[bool, str]:
@@ -181,12 +188,14 @@ class ChromaFactory:
         with jsonl.open("r") as fd:
             for line in fd:
                 element: dict = json.loads(line)
-                # for i, chunk in enumerate(
-                #     split_content_to_fit_max(element["text"], max_partition=150)
-                # ):
+                if element["type"] == "Title":
+                    continue
                 collection.add(
                     documents=element["text"],
-                    metadatas={key: element.get(key, -1) for key in ["page"]},
+                    metadatas={
+                        key: element.get("metadata", {}).get(key, -1)
+                        for key in ["page"]
+                    },
                     ids=f"{element['element_id']}",
                 )
 
@@ -199,11 +208,46 @@ class ChromaFactory:
         )
 
 
-def cli() -> None:
-    from pprint import pprint
-
-    # document_to_jsonl("copyrighted/patchwork.pdf", "copyrighted/patchwork.jsonl")
-    collection = ChromaFactory.from_jsonl(
-        Path("copyrighted/patchwork.v2.jsonl"), Path("copyrighted/patchwork")
+def rag_ask(storage: chromadb.Collection, question: str) -> str:
+    retrieved = storage.query(query_texts=question, n_results=5, include=["documents"])
+    prompt = (
+        "Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.\n"
+        + "\n---\n".join(retrieved["documents"][0])
+        + f"\nQuestion: {question}"
     )
-    pprint(collection.peek())
+    completion = openai.ChatCompletion.create(
+        messages=[{"role": "user", "content": prompt}], model="gpt-3.5-turbo"
+    )
+
+    return completion["choices"][0]["message"]["content"]
+
+
+@click.group()
+def cli() -> None:
+    pass
+
+
+@cli.command()
+@click.argument("pdf", type=click.Path(exists=True, path_type=Path))
+@click.argument("jsonl", type=click.Path(writable=True, path_type=Path))
+def preprocess(pdf: Path, jsonl: Path) -> None:
+    document_to_jsonl(pdf, jsonl)
+
+
+@cli.command()
+@click.argument("jsonl", type=click.Path(exists=True, path_type=Path))
+@click.argument(
+    "db", type=click.Path(dir_okay=True, file_okay=False, writable=True, path_type=Path)
+)
+def upload(jsonl: Path, db: Path) -> None:
+    collection = ChromaFactory.from_jsonl(jsonl, db)
+
+
+@cli.command()
+@click.argument(
+    "db", type=click.Path(exists=True, dir_okay=True, file_okay=False, path_type=Path)
+)
+@click.argument("question", type=str)
+def ask(db: Path, question: str) -> None:
+    collection = ChromaFactory.from_path(db)
+    click.echo(rag_ask(collection, question))
